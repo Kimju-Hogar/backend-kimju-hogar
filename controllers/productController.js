@@ -39,6 +39,8 @@ exports.createProduct = async (req, res) => {
     try {
         const { name, price, description, image, category, stock, variations, discount } = req.body;
 
+        console.log("Create Product Request:", req.body);
+
         const newProduct = new Product({
             name,
             price,
@@ -46,15 +48,15 @@ exports.createProduct = async (req, res) => {
             image,
             category: category || 'General',
             stock,
-            variations: variations ? variations.split(',').map(v => v.trim()) : [],
-            discount: discount || 0
+            variations: variations ? variations.split(',').map(v => v.trim()).filter(v => v) : [],
+            discount: discount ? Number(discount) : 0
         });
 
         const savedProduct = await newProduct.save();
         res.status(201).json(savedProduct);
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+        console.error("Error creating product:", err);
+        res.status(500).json({ message: 'Error al crear producto: ' + err.message });
     }
 };
 
