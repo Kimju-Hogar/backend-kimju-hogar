@@ -17,21 +17,13 @@ const productSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    // Variations support
+    // Simple variations (strings)
     variations: [{
-        sku: String,
-        price: Number,
-        stock: Number,
-        attributes: {
-            color: String,
-            size: String,
-            material: String
-        },
-        image: String
+        type: String
     }],
     discount: {
-        type: { type: String, enum: ['percentage', 'fixed'], default: 'percentage' },
-        value: { type: Number, default: 0 }
+        type: Number,
+        default: 0
     },
     image: {
         type: String,
