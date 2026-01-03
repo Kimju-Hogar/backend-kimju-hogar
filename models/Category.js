@@ -17,9 +17,6 @@ const CategorySchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-CategorySchema.pre('save', function (next) {
-    this.slug = this.name.toLowerCase().split(' ').join('-');
-    next();
-});
+// Removed pre-save hook to avoid 'next is not a function' errors. Slug is generated in controller.
 
 module.exports = mongoose.model('Category', CategorySchema);
