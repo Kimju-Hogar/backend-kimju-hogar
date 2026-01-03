@@ -1,0 +1,108 @@
+const Product = require('../models/Product');
+
+// @desc    Get all products
+// @route   GET /api/products
+// @access  Public
+exports.getProducts = async (req, res) => {
+    try {
+        const products = await Product.find();
+        res.json(products);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// @desc    Get single product
+// @route   GET /api/products/:id
+// @access  Public
+exports.getProductById = async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id);
+        if (!product) {
+            return res.status(404).json({ msg: 'Product not found' });
+        }
+        res.json(product);
+    } catch (err) {
+        console.error(err.message);
+        if (err.kind === 'ObjectId') {
+            return res.status(404).json({ msg: 'Product not found' });
+        }
+        res.status(500).send('Server Error');
+    }
+};
+
+// @desc    Create a product
+// @route   POST /api/products
+// @access  Private/Admin
+exports.createProduct = async (req, res) => {
+    try {
+        const { name, price, description, image, category, stock, variations, discount } = req.body;
+
+        const newProduct = new Product({
+            name,
+            price,
+            description,
+            image,
+            category: category || 'General',
+            stock,
+            variations: variations ? variations.split(',').map(v => v.trim()) : [],
+            discount: discount || 0
+        });
+
+        const savedProduct = await newProduct.save();
+        res.status(201).json(savedProduct);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// @desc    Delete a product
+// @route   DELETE /api/products/:id
+// @access  Private/Admin
+exports.deleteProduct = async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id);
+
+        if (product) {
+            await product.deleteOne(); // updated from remove()
+            res.json({ message: 'Product removed' });
+        } else {
+            res.status(404);
+            throw new Error('Product not found');
+        }
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// @desc    Update a product
+// @route   PUT /api/products/:id
+// @access  Private/Admin
+exports.updateProduct = async (req, res) => {
+    try {
+        const { name, price, description, image, category, stock, variations, discount } = req.body;
+
+        const product = await Product.findById(req.params.id);
+
+        if (product) {
+            product.name = name || product.name;
+            product.price = price || product.price;
+            product.description = description || product.description;
+            product.image = image || product.image; // Handle multiple images if needed
+            product.category = category || product.category;
+            product.stock = stock || product.stock;
+            product.variations = variations || product.variations;
+            product.discount = discount || product.discount;
+
+            const updatedProduct = await product.save();
+            res.json(updatedProduct);
+        } else {
+            res.status(404);
+            throw new Error('Product not found');
+        }
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
