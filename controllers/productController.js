@@ -37,19 +37,27 @@ exports.getProductById = async (req, res) => {
 // @access  Private/Admin
 exports.createProduct = async (req, res) => {
     try {
-        const { name, price, description, image, category, stock, variations, discount } = req.body;
+        const { name, description, price, category, image, stock, featured, discount } = req.body;
+        let { variations } = req.body;
 
         console.log("Create Product Request:", req.body);
 
+        if (variations && typeof variations === 'string') {
+            variations = variations.split(',').map(v => v.trim()).filter(v => v);
+        } else if (!Array.isArray(variations)) {
+            variations = []; // Ensure variations is an array if not provided as string or array
+        }
+
         const newProduct = new Product({
             name,
-            price,
             description,
-            image,
+            price,
             category: category || 'General',
+            image,
             stock,
-            variations: variations ? variations.split(',').map(v => v.trim()).filter(v => v) : [],
-            discount: discount ? Number(discount) : 0
+            variations,
+            featured: featured || false,
+            discount: discount || 0
         });
 
         const savedProduct = await newProduct.save();
