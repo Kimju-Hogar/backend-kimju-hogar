@@ -35,7 +35,26 @@ const userSchema = new mongoose.Schema({
     }],
     avatar: {
         type: String
-    }
+    },
+    favorites: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product'
+    }],
+    cart: [{
+        product: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Product',
+            required: true
+        },
+        quantity: {
+            type: Number,
+            required: true,
+            default: 1
+        },
+        selectedVariation: {
+            type: String
+        }
+    }]
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

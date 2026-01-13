@@ -16,6 +16,7 @@ const { uploadProducts } = require('../controllers/uploadController');
 
 router.get('/', getProducts);
 router.get('/:id', getProductById);
+router.get('/:id/similar', require('../controllers/productController').getSimilarProducts);
 router.post('/', auth, createProduct); // TODO: Add admin check
 router.put('/:id', auth, updateProduct); // New Update Route
 router.post('/batch', auth, upload.single('file'), uploadProducts); // New Bulk Route

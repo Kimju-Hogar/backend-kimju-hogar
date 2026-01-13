@@ -25,7 +25,7 @@ exports.addOrderItems = async (req, res) => {
             throw new Error('No order items');
         } else {
             const order = new Order({
-                user: req.user._id,
+                user: req.user.id,
                 orderItems,
                 shippingAddress,
                 paymentMethod,
@@ -75,10 +75,61 @@ exports.getOrderById = async (req, res) => {
 // @access  Private
 exports.getMyOrders = async (req, res) => {
     try {
-        const orders = await Order.find({ user: req.user.id });
+        const orders = await Order.find({ user: req.user.id }).sort({ createdAt: -1 });
         res.json(orders);
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');
+    }
+};
+
+// @desc    Update order to paid
+// @route   PUT /api/orders/:id/pay
+// @access  Private/Admin
+exports.updateOrderToPaid = async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id);
+
+        if (order) {
+            order.isPaid = true;
+            order.paidAt = Date.now();
+            order.paymentResult = {
+                id: 'MANUAL_PAYMENT',
+                status: 'completed',
+                update_time: Date.now().toString(),
+                email_address: order.shippingAddress.email || 'manual@system.com'
+            };
+
+            const updatedOrder = await order.save();
+            res.json(updatedOrder);
+        } else {
+            res.status(404).json({ message: 'Order not found' });
+        }
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// @desc    Update order status
+// @route   PUT /api/orders/:id/status
+// @access  Private/Admin
+exports.updateOrderStatus = async (req, res) => {
+    try {
+        const { status } = req.body;
+        const order = await Order.findById(req.params.id);
+
+        if (order) {
+            order.status = status;
+            if (status === 'Delivered') {
+                order.isDelivered = true;
+                order.deliveredAt = Date.now();
+            }
+            const updatedOrder = await order.save();
+            res.json(updatedOrder);
+        } else {
+            res.status(404).json({ message: 'Order not found' });
+        }
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
 };

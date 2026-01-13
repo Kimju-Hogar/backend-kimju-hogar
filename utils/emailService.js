@@ -35,12 +35,16 @@ exports.sendOrderEmail = async (order, user) => {
         `
     };
 
+    if (!process.env.EMAIL_USER || process.env.EMAIL_USER === 'test@example.com') {
+        console.log('Skipping emails: EMAIL_USER not configured.');
+        return;
+    }
+
     try {
         await transporter.sendMail(mailOptions);
         await transporter.sendMail(adminMailOptions);
         console.log('Emails sent successfully');
     } catch (error) {
-        console.error('Error sending emails:', error);
-        // Don't throw error to avoid failing the order process, just log it
+        console.error('Error sending emails:', error.message);
     }
 };

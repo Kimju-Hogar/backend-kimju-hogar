@@ -5,7 +5,25 @@ const Product = require('../models/Product');
 // @access  Public
 exports.getProducts = async (req, res) => {
     try {
-        const products = await Product.find();
+        const { category, search, includeOutOfStock } = req.query;
+        let query = {};
+
+        // 1. Stock Filtering: By default only show available products
+        if (includeOutOfStock !== 'true') {
+            query.stock = { $gt: 0 };
+        }
+
+        // 2. Category Filtering
+        if (category && category !== 'All') {
+            query.category = category;
+        }
+
+        // 3. Search Filtering
+        if (search) {
+            query.name = { $regex: search, $options: 'i' };
+        }
+
+        const products = await Product.find(query).sort({ createdAt: -1 });
         res.json(products);
     } catch (err) {
         console.error(err.message);
@@ -112,6 +130,31 @@ exports.updateProduct = async (req, res) => {
             res.status(404);
             throw new Error('Product not found');
         }
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// @desc    Get similar products
+// @route   GET /api/products/:id/similar
+// @access  Public
+exports.getSimilarProducts = async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id);
+        if (!product) {
+            return res.status(404).json({ message: 'Product not found' });
+        }
+
+        // Find products with same category OR shared tags, excluding the current product
+        const similarProducts = await Product.find({
+            _id: { $ne: product._id },
+            $or: [
+                { category: product.category },
+                { tags: { $in: product.tags } }
+            ]
+        }).limit(4);
+
+        res.json(similarProducts);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
