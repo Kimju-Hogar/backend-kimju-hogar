@@ -14,6 +14,12 @@ const CategorySchema = new mongoose.Schema({
     },
     description: {
         type: String
+    },
+    image: {
+        type: String // URL to icon or image
+    },
+    icon: {
+        type: String // Name of the Lucide icon
     }
 }, { timestamps: true });
 

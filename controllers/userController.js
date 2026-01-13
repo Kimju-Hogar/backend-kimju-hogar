@@ -133,3 +133,72 @@ exports.addAddress = async (req, res) => {
         res.status(500).send('Server Error');
     }
 };
+
+// @desc    Toggle favorite product
+// @route   POST /api/users/favorites/:productId
+// @access  Private
+exports.toggleFavorite = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        const productId = req.params.productId;
+
+        const isFavorite = user.favorites.includes(productId);
+
+        if (isFavorite) {
+            user.favorites = user.favorites.filter(id => id.toString() !== productId);
+        } else {
+            user.favorites.push(productId);
+        }
+
+        await user.save();
+        res.json({ favorites: user.favorites });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// @desc    Get favorite products
+// @route   GET /api/users/favorites
+// @access  Private
+exports.getFavorites = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).populate('favorites');
+        res.json(user.favorites);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+// @desc    Get user's cart
+// @route   GET /api/users/cart
+// @access  Private
+exports.getCart = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).populate('cart.product');
+        res.json(user.cart);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// @desc    Update user's cart
+// @route   POST /api/users/cart
+// @access  Private
+exports.updateCart = async (req, res) => {
+    try {
+        const user = await User.findOneAndUpdate(
+            { _id: req.user.id },
+            { $set: { cart: req.body } },
+            { new: true, runValidators: true }
+        );
+
+        if (!user) {
+            return res.status(404).json({ msg: 'User not found' });
+        }
+
+        res.json(user.cart);
+    } catch (err) {
+        console.error('Update Cart Error:', err.message);
+        res.status(500).send('Server Error');
+    }
+};
