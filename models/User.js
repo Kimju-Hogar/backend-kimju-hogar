@@ -14,6 +14,8 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: function () { return !this.googleId; } // Not required if using Google
     },
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
     phone: {
         type: String, // For OTP/Phone login
     },
@@ -29,8 +31,11 @@ const userSchema = new mongoose.Schema({
         street: String,
         city: String,
         state: String,
+        neighborhood: String,
         zip: String,
         country: String,
+        additionalInfo: String,
+        phone: String, // Contact phone for this address
         isDefault: { type: Boolean, default: false }
     }],
     avatar: {

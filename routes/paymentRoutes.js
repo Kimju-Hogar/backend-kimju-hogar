@@ -25,6 +25,21 @@ router.post('/create_preference', auth, async (req, res) => {
             return res.status(404).json({ msg: 'Order not found' });
         }
 
+        // 1. Validate Stock BEFORE creating preference
+        for (const item of order.orderItems) {
+            const product = await Product.findById(item.product);
+            if (!product) {
+                return res.status(404).json({ msg: `Producto no encontrado: ${item.name}` });
+            }
+            if (product.stock < item.quantity) {
+                return res.status(400).json({
+                    msg: `Stock insuficiente para: ${item.name}`,
+                    productId: item.product,
+                    available: product.stock
+                });
+            }
+        }
+
         const preference = new Preference(mercadopagoClient);
 
         const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').trim();
@@ -55,7 +70,7 @@ router.post('/create_preference', auth, async (req, res) => {
             body.notification_url = `${backendUrl}/api/payments/webhook`;
         }
 
-        console.log('Llamando a Mercado Pago...');
+        console.log('Llamando a Mercado Pago con body:', JSON.stringify(body, null, 2));
         const result = await preference.create({ body });
 
         console.log('Preferencia creada:', result.id);
