@@ -19,6 +19,8 @@ app.use('/api/categories', require('./routes/categoryRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
+app.use('/api/newsletter', require('./routes/newsletterRoutes'));
+app.use('/api/contact', require('./routes/contactRoutes'));
 
 // Upload Route for Images
 const { uploadImage } = require('./controllers/imageController');

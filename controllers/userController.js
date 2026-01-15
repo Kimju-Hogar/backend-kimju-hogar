@@ -2,9 +2,9 @@ const User = require('../models/User');
 
 // @desc    Get user profile
 // @route   GET /api/users/profile
-// @access  Private
 exports.getUserProfile = async (req, res) => {
     try {
+        // Populate cart products if needed, but usually profile just needs user info
         const user = await User.findById(req.user.id).select('-password');
         res.json(user);
     } catch (err) {
@@ -15,7 +15,6 @@ exports.getUserProfile = async (req, res) => {
 
 // @desc    Update user profile
 // @route   PUT /api/users/profile
-// @access  Private
 exports.updateUserProfile = async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
@@ -23,21 +22,32 @@ exports.updateUserProfile = async (req, res) => {
         if (user) {
             user.name = req.body.name || user.name;
             user.email = req.body.email || user.email;
-            user.phone = req.body.phone || user.phone;
+
+            // Phone validation
+            if (req.body.phone) {
+                const phoneRegex = /^3[0-9]{9}$/;
+                if (!phoneRegex.test(req.body.phone)) {
+                    return res.status(400).json({ msg: 'Número de teléfono inválido. Debe ser de Colombia (10 dígitos, empieza por 3).' });
+                }
+                user.phone = req.body.phone;
+            }
+
             if (req.body.password) {
-                // Password hashing logic handles in pre-save if implemented or manually here
-                const salt = await require('bcryptjs').genSalt(10);
-                user.password = await require('bcryptjs').hash(req.body.password, salt);
+                const bcrypt = require('bcryptjs');
+                const salt = await bcrypt.genSalt(10);
+                user.password = await bcrypt.hash(req.body.password, salt);
             }
 
             const updatedUser = await user.save();
+
             res.json({
                 _id: updatedUser._id,
                 name: updatedUser.name,
                 email: updatedUser.email,
                 phone: updatedUser.phone,
                 role: updatedUser.role,
-                token: require('../middleware/generateToken')(updatedUser._id) // Optional: refresh token
+                token: req.header('x-auth-token'),
+                googleId: updatedUser.googleId
             });
         } else {
             res.status(404).json({ msg: 'User not found' });
@@ -48,129 +58,157 @@ exports.updateUserProfile = async (req, res) => {
     }
 };
 
-// @desc    Get all users
-// @route   GET /api/users
-// @access  Private/Admin
-exports.getUsers = async (req, res) => {
-    try {
-        const users = await User.find({});
-        res.json(users);
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
-};
-
-// @desc    Delete user
-// @route   DELETE /api/users/:id
-// @access  Private/Admin
-exports.deleteUser = async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id);
-        if (user) {
-            await user.deleteOne();
-            res.json({ message: 'User removed' });
-        } else {
-            res.status(404);
-            throw new Error('User not found');
-        }
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
-};
-
-// @desc    Update user by Admin
-// @route   PUT /api/users/:id
-// @access  Private/Admin
-exports.adminUpdateUser = async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id);
-
-        if (user) {
-            user.name = req.body.name || user.name;
-            user.email = req.body.email || user.email;
-            user.phone = req.body.phone || user.phone;
-            user.role = req.body.role || user.role; // Admin can update role
-
-            if (req.body.password) {
-                const salt = await require('bcryptjs').genSalt(10);
-                user.password = await require('bcryptjs').hash(req.body.password, salt);
-            }
-
-            const updatedUser = await user.save();
-            res.json({
-                _id: updatedUser._id,
-                name: updatedUser.name,
-                email: updatedUser.email,
-                phone: updatedUser.phone,
-                role: updatedUser.role,
-            });
-        } else {
-            res.status(404);
-            throw new Error('User not found');
-        }
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
-};
-
-// @desc    Add Address
+// @desc    Add new address
 // @route   POST /api/users/address
-// @access  Private
 exports.addAddress = async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
-        const address = req.body; // { street, city, ... }
-
-        // If default, unset other defaults
-        if (address.isDefault) {
-            user.addresses.forEach(a => a.isDefault = false);
+        if (user) {
+            user.addresses.push(req.body);
+            await user.save();
+            res.json(user.addresses);
+        } else {
+            res.status(404).json({ msg: 'User not found' });
         }
-
-        user.addresses.push(address);
-        await user.save();
-        res.json(user.addresses);
     } catch (err) {
+        console.error(err.message);
         res.status(500).send('Server Error');
     }
 };
 
-// @desc    Toggle favorite product
+// @desc    Delete Address
+// @route   DELETE /api/users/address/:addressId
+exports.deleteAddress = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+
+        if (user) {
+            user.addresses = user.addresses.filter(
+                (address) => address._id.toString() !== req.params.addressId
+            );
+            await user.save();
+            res.json(user.addresses);
+        } else {
+            res.status(404).json({ msg: 'User not found' });
+        }
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// @desc    Update Address
+// @route   PUT /api/users/address/:addressId
+exports.updateAddress = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+
+        if (user) {
+            const addressIndex = user.addresses.findIndex(
+                (addr) => addr._id.toString() === req.params.addressId
+            );
+
+            if (addressIndex > -1) {
+                // Determine if we need to unset other defaults
+                if (req.body.isDefault) {
+                    user.addresses.forEach(addr => addr.isDefault = false);
+                }
+
+                user.addresses[addressIndex] = {
+                    ...user.addresses[addressIndex].toObject(),
+                    ...req.body,
+                    _id: user.addresses[addressIndex]._id // Preserve ID
+                };
+
+                await user.save();
+                res.json(user.addresses);
+            } else {
+                res.status(404).json({ msg: 'Address not found' });
+            }
+        } else {
+            res.status(404).json({ msg: 'User not found' });
+        }
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// @desc    Delete User Account (Self)
+// @route   DELETE /api/users/profile
+exports.deleteMyAccount = async (req, res) => {
+    try {
+        const user = await User.findByIdAndDelete(req.user.id);
+        if (!user) return res.status(404).json({ msg: 'User not found' });
+        res.json({ msg: 'Cuenta eliminada correctamente.' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// @desc    Get all users (Admin)
+// @route   GET /api/users
+exports.getUsers = async (req, res) => {
+    try {
+        const users = await User.find().select('-password');
+        res.json(users);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// @desc    Delete user (Admin)
+// @route   DELETE /api/users/:id
+exports.deleteUser = async (req, res) => {
+    try {
+        await User.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'User deleted' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// @desc    Get Favorites
+// @route   GET /api/users/favorites
+exports.getFavorites = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).populate('favorites');
+        res.json(user.favorites);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// @desc    Toggle Favorite
 // @route   POST /api/users/favorites/:productId
-// @access  Private
 exports.toggleFavorite = async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
         const productId = req.params.productId;
 
-        const isFavorite = user.favorites.includes(productId);
-
-        if (isFavorite) {
+        if (user.favorites.includes(productId)) {
             user.favorites = user.favorites.filter(id => id.toString() !== productId);
         } else {
             user.favorites.push(productId);
         }
 
         await user.save();
-        res.json({ favorites: user.favorites });
+
+        // Return full populated favorites
+        const populatedUser = await User.findById(req.user.id).populate('favorites');
+        res.json(populatedUser.favorites);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        console.error(err.message);
+        res.status(500).send('Server Error');
     }
 };
 
-// @desc    Get favorite products
-// @route   GET /api/users/favorites
-// @access  Private
-exports.getFavorites = async (req, res) => {
-    try {
-        const user = await User.findById(req.user.id).populate('favorites');
-        res.json(user.favorites);
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
-};
-// @desc    Get user's cart
+// @desc    Get Cart
 // @route   GET /api/users/cart
-// @access  Private
 exports.getCart = async (req, res) => {
     try {
         const user = await User.findById(req.user.id).populate('cart.product');
@@ -181,24 +219,22 @@ exports.getCart = async (req, res) => {
     }
 };
 
-// @desc    Update user's cart
+// @desc    Update/Sync Cart
 // @route   POST /api/users/cart
-// @access  Private
 exports.updateCart = async (req, res) => {
     try {
-        const user = await User.findOneAndUpdate(
-            { _id: req.user.id },
-            { $set: { cart: req.body } },
-            { new: true, runValidators: true }
-        );
+        const user = await User.findById(req.user.id);
+        const { cart } = req.body; // Expecting array of { product, quantity, variation }
 
-        if (!user) {
-            return res.status(404).json({ msg: 'User not found' });
+        // Simple replace strategy for sync
+        if (cart) {
+            user.cart = cart;
+            await user.save();
         }
 
         res.json(user.cart);
     } catch (err) {
-        console.error('Update Cart Error:', err.message);
+        console.error(err.message);
         res.status(500).send('Server Error');
     }
 };
