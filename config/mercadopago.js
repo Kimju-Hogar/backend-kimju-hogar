@@ -1,11 +1,21 @@
 const { MercadoPagoConfig } = require('mercadopago');
 
-if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
-    console.error('CRITICAL: MERCADOPAGO_ACCESS_TOKEN is missing in .env');
+let cachedClient = null;
+
+function getMercadoPagoClient() {
+    if (cachedClient) return cachedClient;
+
+    const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+
+    if (!accessToken) {
+        throw new Error('MERCADOPAGO_ACCESS_TOKEN is missing');
+    }
+
+    cachedClient = new MercadoPagoConfig({
+        accessToken
+    });
+
+    return cachedClient;
 }
 
-const mercadopagoClient = new MercadoPagoConfig({
-    accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN || ''
-});
-
-module.exports = { mercadopagoClient };
+module.exports = { getMercadoPagoClient };
