@@ -4,6 +4,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 
 dotenv.config();
+console.log('MONGO_URI:', process.env.MONGO_URI);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -35,7 +36,6 @@ app.get('/', (req, res) => {
 });
 
 // Database Connection
-console.log('MONGO_URI:', process.env.MONGO_URI);
 
 mongoose.connect(process.env.MONGO_URI, {
     // useNewUrlParser and useUnifiedTopology are no longer needed in Mongoose 6+ 
