@@ -35,6 +35,8 @@ app.get('/', (req, res) => {
 });
 
 // Database Connection
+console.log('MONGO_URI:', process.env.MONGO_URI);
+
 mongoose.connect(process.env.MONGO_URI, {
     // useNewUrlParser and useUnifiedTopology are no longer needed in Mongoose 6+ 
     // but keeping generic connect for now.
