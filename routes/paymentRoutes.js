@@ -67,7 +67,7 @@ router.post('/create_preference', auth, async (req, res) => {
         };
 
         if (backendUrl && !backendUrl.includes('localhost')) {
-            body.notification_url = `${backendUrl}/api/payments/webhook`;
+            body.notification_url = `${process.env.BACKEND_URL}/api/payments/webhook`;
         }
 
         console.log('Llamando a Mercado Pago con body:', JSON.stringify(body, null, 2));

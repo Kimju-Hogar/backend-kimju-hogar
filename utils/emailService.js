@@ -105,7 +105,7 @@ const sendRecoveryEmail = async (user, token) => {
         console.log(`[EMAIL] Sending Recovery to ${user.email}`);
 
         // Link to Frontend Reset Page
-        const resetUrl = `http://localhost:5173/reset-password/${token}`;
+        const resetUrl = `${process.env.BASE_URL}/reset-password/${token}`;
 
         const htmlContent = getTemplate(
             'Restablecer Contraseña 🔐',

@@ -42,7 +42,7 @@ exports.uploadProducts = async (req, res) => {
                         const cleanPath = imageUrl.replace(/^\/+/, '');
                         // If user just put "silla.jpg", make it "http://localhost:5000/uploads/silla.jpg"
                         // TODO: Use env variable for base URL
-                        imageUrl = `http://localhost:5000/uploads/${cleanPath}`;
+                        imageUrl = `${process.env.BACKEND_URL}/uploads/${cleanPath}`;
                     }
 
                     const productData = {
