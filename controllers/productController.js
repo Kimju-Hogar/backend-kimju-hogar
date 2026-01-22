@@ -55,7 +55,7 @@ exports.getProductById = async (req, res) => {
 // @access  Private/Admin
 exports.createProduct = async (req, res) => {
     try {
-        const { name, description, price, category, image, stock, featured, discount } = req.body;
+        const { name, description, price, category, image, stock, featured, discount, images } = req.body;
         let { variations } = req.body;
 
         console.log("Create Product Request:", req.body);
@@ -72,6 +72,7 @@ exports.createProduct = async (req, res) => {
             price,
             category: category || 'General',
             image,
+            images: images || [],
             stock,
             variations,
             featured: featured || false,
@@ -118,7 +119,8 @@ exports.updateProduct = async (req, res) => {
             product.name = name || product.name;
             product.price = price || product.price;
             product.description = description || product.description;
-            product.image = image || product.image; // Handle multiple images if needed
+            product.image = image || product.image;
+            product.images = req.body.images || product.images; // Update images if provided
             product.category = category || product.category;
             product.stock = stock || product.stock;
             product.variations = variations || product.variations;

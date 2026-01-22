@@ -4,7 +4,6 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 
 dotenv.config();
-console.log('MONGO_URI:', process.env.MONGO_URI);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -24,8 +23,9 @@ app.use('/api/newsletter', require('./routes/newsletterRoutes'));
 app.use('/api/contact', require('./routes/contactRoutes'));
 
 // Upload Route for Images
-const { uploadImage } = require('./controllers/imageController');
+const { uploadImage, uploadImages } = require('./controllers/imageController');
 app.post('/api/upload', uploadImage);
+app.post('/api/upload/multiple', uploadImages);
 
 // Serve static assets (images)
 app.use('/uploads', express.static('uploads'));

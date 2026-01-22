@@ -52,6 +52,7 @@ exports.uploadImage = (req, res) => {
         }
 
         if (!req.file) {
+            console.error("Single upload failed: No file selected");
             return res.status(400).json({ message: 'No file selected' });
         }
 
@@ -61,6 +62,30 @@ exports.uploadImage = (req, res) => {
         res.json({
             message: 'Image uploaded',
             filePath: filePath
+        });
+    });
+};
+
+// Multiple Images Upload Endpoint
+exports.uploadImages = (req, res) => {
+    const uploader = upload.array('images', 5); // Allow up to 5 images
+
+    uploader(req, res, function (err) {
+        if (err) {
+            console.error("Multer Error:", err);
+            return res.status(500).json({ message: err.message || "Error al subir las imagenes" });
+        }
+
+        if (!req.files || req.files.length === 0) {
+            console.error("Multi upload failed: No files selected");
+            return res.status(400).json({ message: 'No files selected' });
+        }
+
+        const filePaths = req.files.map(file => `/uploads/${file.filename}`);
+
+        res.json({
+            message: 'Images uploaded',
+            filePaths: filePaths
         });
     });
 };

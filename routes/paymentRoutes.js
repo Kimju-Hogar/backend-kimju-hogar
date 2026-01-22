@@ -149,4 +149,82 @@ router.post('/webhook', async (req, res) => {
     }
 });
 
+// @desc    Verify Payment Status (Frontend fallback)
+// @route   POST /api/payments/verify_payment
+// @access  Private
+router.post('/verify_payment', auth, async (req, res) => {
+    try {
+        const { orderId, paymentId } = req.body;
+        console.log('--- VERIFICANDO PAGO (FRONTEND) ---');
+        console.log(`Order: ${orderId}, Payment: ${paymentId}`);
+
+        if (!orderId) {
+            return res.status(400).json({ msg: 'Order ID is required' });
+        }
+
+        // Validate ObjectId format to prevent CastError
+        if (!orderId.match(/^[0-9a-fA-F]{24}$/)) {
+            return res.status(400).json({ msg: 'Invalid Order ID format' });
+        }
+
+        const order = await Order.findById(orderId);
+        if (!order) return res.status(404).json({ msg: 'Order not found' });
+
+        // If already paid, return success
+        if (order.isPaid) {
+            return res.json({ status: 'approved', order });
+        }
+
+        // Check against Mercado Pago if paymentId is provided
+        if (paymentId && paymentId !== 'null' && paymentId !== 'undefined') {
+            try {
+                const payment = new Payment(mercadopagoClient);
+                const paymentData = await payment.get({ id: paymentId });
+
+                console.log('MP Status:', paymentData.status);
+
+                if (paymentData.status === 'approved') {
+                    order.isPaid = true;
+                    order.paidAt = Date.now();
+                    order.status = 'Processing';
+                    order.paymentResult = {
+                        id: paymentData.id.toString(),
+                        status: paymentData.status,
+                        update_time: paymentData.date_approved,
+                        email_address: paymentData.payer.email
+                    };
+
+                    await order.save();
+
+                    // Update Stock
+                    for (const item of order.orderItems) {
+                        const product = await Product.findById(item.product);
+                        if (product) {
+                            product.stock = Math.max(0, product.stock - item.quantity);
+                            await product.save();
+                        }
+                    }
+                    return res.json({ status: 'approved', order });
+                } else if (paymentData.status === 'in_process' || paymentData.status === 'pending') {
+                    return res.json({ status: 'pending', order });
+                } else {
+                    return res.json({ status: 'rejected', order });
+                }
+            } catch (mpError) {
+                console.error("Mercado Pago Verify Error:", mpError.message);
+                // Return 500 but don't crash the whole server... actually we are in catch block
+                // If MP fails, maybe return pending?
+                // Or just return the current order status
+                return res.json({ status: order.isPaid ? 'approved' : 'pending', order });
+            }
+        }
+
+        res.json({ status: order.isPaid ? 'approved' : 'pending', order });
+
+    } catch (error) {
+        console.error('Verify Error Helper:', error);
+        res.status(500).json({ msg: 'Error verifying payment', error: error.message });
+    }
+});
+
 module.exports = router;
