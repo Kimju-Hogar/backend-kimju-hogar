@@ -75,6 +75,15 @@ router.post('/create_preference', auth, async (req, res) => {
 
         const body = {
             items,
+            payer: {
+                name: req.user.name ? req.user.name.split(' ')[0] : 'User',
+                surname: req.user.name ? req.user.name.split(' ').slice(1).join(' ') : '',
+                email: req.user.email,
+                phone: {
+                    area_code: '57',
+                    number: req.user.phone || '0000000000'
+                }
+            },
             back_urls: {
                 success: `${frontendUrl}/order/${orderId}/success`,
                 failure: `${frontendUrl}/order/${orderId}/failure`,
