@@ -7,6 +7,23 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const { sendOrderEmail } = require('../utils/emailService');
+const crypto = require('crypto');
+
+
+function validateSignature(req) {
+    const signature = req.headers['x-signature'];
+    if (!signature) return false;
+
+    const payload = JSON.stringify(req.body);
+    const secret = process.env.MP_WEBHOOK_SECRET;
+
+    const expected = crypto
+        .createHmac('sha256', secret)
+        .update(payload)
+        .digest('hex');
+
+    return signature === expected;
+}
 
 // @desc    Create Mercado Pago preference
 // @route   POST /api/payments/create_preference
@@ -102,59 +119,97 @@ router.post('/create_preference', auth, async (req, res) => {
 // @route   POST /api/payments/webhook
 // @access  Public
 router.post('/webhook', async (req, res) => {
-    const { query } = req;
-    const topic = query.topic || query.type;
-
+    if (!validateSignature(req)) {
+        console.error('Webhook MP inválido (firma incorrecta)');
+        return res.sendStatus(401);
+    }
     try {
-        if (topic === 'payment') {
-            const paymentId = query.id || query['data.id'];
-            console.log('Payment Webhook Received:', paymentId);
+        const topic =
+            req.query.topic ||
+            req.query.type ||
+            req.body?.type;
 
-            const payment = new Payment(mercadopagoClient);
-            const paymentData = await payment.get({ id: paymentId });
+        const paymentId =
+            req.query.id ||
+            req.query['data.id'] ||
+            req.body?.data?.id;
 
-            if (paymentData.status === 'approved') {
-                const orderId = paymentData.external_reference;
-                const order = await Order.findById(orderId);
+        console.log('--- WEBHOOK MERCADO PAGO ---');
+        console.log('Topic:', topic);
+        console.log('Payment ID:', paymentId);
 
-                if (order && !order.isPaid) {
-                    // 1. Update Order
-                    order.isPaid = true;
-                    order.paidAt = Date.now();
-                    order.status = 'Processing';
-                    order.paymentResult = {
-                        id: paymentData.id.toString(),
-                        status: paymentData.status,
-                        update_time: paymentData.date_approved,
-                        email_address: paymentData.payer.email
-                    };
+        if (!paymentId) {
+            return res.sendStatus(200);
+        }
 
-                    await order.save();
+        // SOLO procesamos pagos
+        if (topic !== 'payment' && topic !== 'merchant_order') {
+            return res.sendStatus(200);
+        }
 
-                    // 2. Update Stock
-                    for (const item of order.orderItems) {
-                        const product = await Product.findById(item.product);
-                        if (product) {
-                            product.stock = Math.max(0, product.stock - item.quantity);
-                            await product.save();
-                        }
-                    }
+        const payment = new Payment(mercadopagoClient);
+        const paymentData = await payment.get({ id: paymentId });
 
-                    console.log(`Order ${orderId} marked as PAID and stock updated.`);
+        console.log('MP STATUS:', paymentData.status);
 
-                    // 3. Send Confirmation Email
-                    const user = await User.findById(order.user);
-                    if (user) {
-                        await sendOrderEmail(order, user);
-                        console.log(`Confirmation email sent to ${user.email}`);
-                    }
-                }
+        if (paymentData.status !== 'approved') {
+            return res.sendStatus(200);
+        }
+
+        const orderId = paymentData.external_reference;
+        if (!orderId) {
+            console.error('Payment sin external_reference');
+            return res.sendStatus(200);
+        }
+
+        const order = await Order.findById(orderId);
+        if (!order) {
+            console.error('Orden no encontrada:', orderId);
+            return res.sendStatus(200);
+        }
+
+        // Evitar duplicados
+        if (order.isPaid) {
+            console.log('Orden ya pagada:', orderId);
+            return res.sendStatus(200);
+        }
+
+        // 1. Marcar orden como pagada
+        order.isPaid = true;
+        order.paidAt = Date.now();
+        order.status = 'Processing';
+        order.paymentResult = {
+            id: paymentData.id.toString(),
+            status: paymentData.status,
+            update_time: paymentData.date_approved,
+            email_address: paymentData.payer?.email || ''
+        };
+
+        await order.save();
+
+        // 2. Actualizar stock
+        for (const item of order.orderItems) {
+            const product = await Product.findById(item.product);
+            if (product) {
+                product.stock = Math.max(0, product.stock - item.quantity);
+                await product.save();
             }
         }
-        res.sendStatus(200);
+
+        // 3. Enviar correo
+        const user = await User.findById(order.user);
+        if (user) {
+            await sendOrderEmail(order, user);
+            console.log('Correo enviado a:', user.email);
+        }
+
+        console.log('ORDEN PAGADA CORRECTAMENTE:', orderId);
+
+        return res.sendStatus(200);
+
     } catch (error) {
-        console.error('Webhook Error:', error);
-        res.sendStatus(500);
+        console.error('ERROR WEBHOOK MP:', error);
+        return res.sendStatus(500);
     }
 });
 
