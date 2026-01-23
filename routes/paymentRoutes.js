@@ -5,6 +5,8 @@ const { mercadopagoClient } = require('../config/mercadopago');
 const auth = require('../middleware/authMiddleware');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const User = require('../models/User');
+const { sendOrderEmail } = require('../utils/emailService');
 
 // @desc    Create Mercado Pago preference
 // @route   POST /api/payments/create_preference
@@ -139,6 +141,13 @@ router.post('/webhook', async (req, res) => {
                     }
 
                     console.log(`Order ${orderId} marked as PAID and stock updated.`);
+
+                    // 3. Send Confirmation Email
+                    const user = await User.findById(order.user);
+                    if (user) {
+                        await sendOrderEmail(order, user);
+                        console.log(`Confirmation email sent to ${user.email}`);
+                    }
                 }
             }
         }
@@ -204,6 +213,13 @@ router.post('/verify_payment', auth, async (req, res) => {
                             await product.save();
                         }
                     }
+
+                    // Send Confirmation Email
+                    const user = await User.findById(order.user);
+                    if (user) {
+                        await sendOrderEmail(order, user);
+                    }
+
                     return res.json({ status: 'approved', order });
                 } else if (paymentData.status === 'in_process' || paymentData.status === 'pending') {
                     return res.json({ status: 'pending', order });
