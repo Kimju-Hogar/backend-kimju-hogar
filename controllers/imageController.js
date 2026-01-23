@@ -9,11 +9,18 @@ if (!fs.existsSync(uploadPath)) {
 }
 
 // Storage configuration
-// Storage configuration
 const storage = multer.diskStorage({
     destination(req, file, cb) {
-        const uploadPath = path.resolve(__dirname, '../uploads');
-        cb(null, uploadPath);
+        // Use external path if provided in ENV, otherwise default to local 'uploads'
+        const isProduction = process.env.NODE_ENV === 'production';
+        // If UPLOAD_PATH is set (e.g. /home/user/media/products), use it. 
+        // Otherwise use default local ./uploads
+        const dest = process.env.UPLOAD_PATH || path.resolve(__dirname, '../uploads');
+
+        if (!fs.existsSync(dest)) {
+            fs.mkdirSync(dest, { recursive: true });
+        }
+        cb(null, dest);
     },
     filename(req, file, cb) {
         cb(null, `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`);

@@ -28,7 +28,9 @@ app.post('/api/upload', uploadImage);
 app.post('/api/upload/multiple', uploadImages);
 
 // Serve static assets (images)
-app.use('/uploads', express.static('uploads'));
+// Serve static assets (images)
+const uploadDir = process.env.UPLOAD_PATH || path.join(__dirname, 'uploads');
+app.use('/uploads', express.static(uploadDir));
 
 // Basic Route
 app.get('/', (req, res) => {

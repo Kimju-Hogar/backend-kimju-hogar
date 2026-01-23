@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { Preference, Payment } = require('mercadopago');
-const { mercadopagoClient } = require('../config/mercadopago');
+const { getMercadoPagoClient } = require('../config/mercadopago');
+const mercadopagoClient = getMercadoPagoClient();
 const auth = require('../middleware/authMiddleware');
 const Order = require('../models/Order');
 const Product = require('../models/Product');

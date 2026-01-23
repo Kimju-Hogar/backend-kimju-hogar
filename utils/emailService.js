@@ -79,7 +79,7 @@ const sendOrderEmail = async (order, user) => {
         `;
 
         const htmlContent = getTemplate(
-            `¡Gracias por tu compra, ${user.name.split(' ')[0]}! 💖`,
+            `¡Gracias por tu compra, ${(user.name || 'Cliente').split(' ')[0]}! 💖`,
             `Estamos preparando tu pedido #${order._id} con mucho cuidado y cariño. Aquí tienes un resumen de tus cositas maravillosas:<br/><br/>${itemsHtml}`,
             'https://kimjuhogar.com/profile', // Link to view order
             'Ver mi Pedido'
@@ -109,7 +109,7 @@ const sendRecoveryEmail = async (user, token) => {
 
         const htmlContent = getTemplate(
             'Restablecer Contraseña 🔐',
-            `Hola ${user.name.split(' ')[0]}, hemos recibido una solicitud para cambiar tu contraseña. Si no fuiste tú, ignora este mensaje.<br/><br/>Para crear una nueva contraseña, haz clic en el siguiente botón:`,
+            `Hola ${(user.name || 'Usuario').split(' ')[0]}, hemos recibido una solicitud para cambiar tu contraseña. Si no fuiste tú, ignora este mensaje.<br/><br/>Para crear una nueva contraseña, haz clic en el siguiente botón:`,
             resetUrl,
             'Restablecer Contraseña'
         );

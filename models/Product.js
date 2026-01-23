@@ -7,7 +7,7 @@ const productSchema = new mongoose.Schema({
     },
     description: {
         type: String,
-        required: true,
+        // required: true, // Made optional to prevent validation errors on partial creation
     },
     price: {
         type: Number,
