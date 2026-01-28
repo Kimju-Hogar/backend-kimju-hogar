@@ -31,6 +31,7 @@ app.post('/api/upload/multiple', uploadImages);
 // Serve static assets (images)
 
 const uploadDir = process.env.UPLOAD_PATH || path.join(__dirname, 'uploads');
+console.log(`Configuring static uploads directory: ${uploadDir}`);
 app.use('/uploads', express.static(uploadDir));
 
 // Basic Route

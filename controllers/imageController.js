@@ -16,6 +16,7 @@ const storage = multer.diskStorage({
         // If UPLOAD_PATH is set (e.g. /home/user/media/products), use it. 
         // Otherwise use default local ./uploads
         const dest = process.env.UPLOAD_PATH || path.resolve(__dirname, '../uploads');
+        console.log('Saving file to:', dest);
 
         if (!fs.existsSync(dest)) {
             fs.mkdirSync(dest, { recursive: true });
