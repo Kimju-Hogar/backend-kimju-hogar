@@ -17,6 +17,7 @@ const orderSchema = new mongoose.Schema({
             quantity: { type: Number, required: true },
             price: { type: Number, required: true },
             image: { type: String },
+            selectedVariation: { type: String }, // Store selected variation (color, style, etc.)
         }
     ],
     shippingAddress: {

@@ -43,17 +43,12 @@ exports.addOrderItems = async (req, res) => {
             const createdOrder = await order.save();
 
 
-            // Send Notifications
-            // Fetch full user details to ensure we have the email (JWT might be minimal)
-            const fullUser = await require('../models/User').findById(req.user.id);
-            if (fullUser) {
-                // To Customer
-                await sendOrderEmail(createdOrder, fullUser);
-                // To Admin
-                await sendAdminNewOrderEmail(createdOrder, fullUser);
-            } else {
-                console.warn("User not found for email notification");
-            }
+            // Emails will be sent after Wompi Payment Verification
+            // const fullUser = await require('../models/User').findById(req.user.id);
+            // if (fullUser) {
+            //    await sendOrderEmail(createdOrder, fullUser);
+            //    await sendAdminNewOrderEmail(createdOrder, fullUser);
+            // }
 
             res.status(201).json(createdOrder);
         }
@@ -168,6 +163,10 @@ exports.verifyWompiPayment = async (req, res) => {
         }
 
         if (order) {
+            if (order.isPaid) {
+                return res.json(order); // Already processed
+            }
+
             order.isPaid = true;
             order.paidAt = Date.now();
             order.paymentResult = {
@@ -189,6 +188,13 @@ exports.verifyWompiPayment = async (req, res) => {
             }
 
             const updatedOrder = await order.save();
+
+            // Send Notifications (Only if just paid)
+            const fullUser = await require('../models/User').findById(order.user);
+            if (fullUser) {
+                await sendOrderEmail(updatedOrder, fullUser);
+                await sendAdminNewOrderEmail(updatedOrder, fullUser);
+            }
 
             res.json(updatedOrder);
         } else {

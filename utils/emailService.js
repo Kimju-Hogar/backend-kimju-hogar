@@ -73,9 +73,18 @@ const sendOrderEmail = async (order, user) => {
         const itemsHtml = `
             <div class="items-box">
                 ${order.orderItems.map(item => `
-                    <div class="item-row">
-                        <span>${item.name} (x${item.quantity})</span>
-                        <span>$${item.price.toLocaleString()}</span>
+                    <div class="item-row" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #fce7f3; padding-bottom: 10px; margin-bottom: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                             ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 1px solid #fce7f3;">` : ''}
+                             <div style="text-align: left;">
+                                 <div style="font-size: 14px; font-weight: 700; color: #db2777;">${item.name}</div>
+                                 <div style="font-size: 12px; color: #9ca3af;">
+                                     Qty: ${item.quantity} 
+                                     ${item.selectedVariation ? `• <span style="background: #fdf2f8; padding: 2px 6px; border-radius: 4px; color: #be185d; font-weight: 600;">${item.selectedVariation}</span>` : ''}
+                                 </div>
+                             </div>
+                        </div>
+                        <span style="font-weight: 800; color: #db2777;">$${item.price.toLocaleString()}</span>
                     </div>
                 `).join('')}
                 <div class="total">Total: $${order.totalPrice.toLocaleString()}</div>
@@ -112,9 +121,18 @@ const sendAdminNewOrderEmail = async (order, user) => {
         const itemsHtml = `
             <div class="items-box">
                 ${order.orderItems.map(item => `
-                    <div class="item-row">
-                        <span>${item.name} (x${item.quantity})</span>
-                        <span>$${item.price.toLocaleString()}</span>
+                    <div class="item-row" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #fce7f3; padding-bottom: 10px; margin-bottom: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                             ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 1px solid #fce7f3;">` : ''}
+                             <div style="text-align: left;">
+                                 <div style="font-size: 14px; font-weight: 700; color: #db2777;">${item.name}</div>
+                                 <div style="font-size: 12px; color: #9ca3af;">
+                                     Qty: ${item.quantity} 
+                                     ${item.selectedVariation ? `• <span style="background: #fdf2f8; padding: 2px 6px; border-radius: 4px; color: #be185d; font-weight: 600;">${item.selectedVariation}</span>` : ''}
+                                 </div>
+                             </div>
+                        </div>
+                        <span style="font-weight: 800; color: #db2777;">$${item.price.toLocaleString()}</span>
                     </div>
                 `).join('')}
                 <div class="total">Total: $${order.totalPrice.toLocaleString()}</div>
