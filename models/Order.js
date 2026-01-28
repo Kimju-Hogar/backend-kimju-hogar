@@ -5,7 +5,7 @@ const orderSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
-    },
+    }, // Make user optional for Guest Checkout if needed later, but currently required.
     orderItems: [
         {
             product: {
@@ -27,8 +27,12 @@ const orderSchema = new mongoose.Schema({
         state: { type: String, required: true },
         postalCode: { type: String },
         country: { type: String, required: true },
+        country: { type: String, required: true },
         additionalInfo: { type: String },
+        legalId: { type: String }, // Saved DNI/CC
+        email: { type: String } // Backup email in shipping address
     },
+    trackingNumber: { type: String }, // Explicit field for tracking
     paymentMethod: {
         type: String,
         required: true,

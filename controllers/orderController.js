@@ -28,7 +28,11 @@ exports.addOrderItems = async (req, res) => {
             const order = new Order({
                 user: req.user.id,
                 orderItems,
-                shippingAddress,
+                shippingAddress: {
+                    ...shippingAddress,
+                    // Ensure legalId is passed if it exists in shippingAddress object
+                    legalId: shippingAddress.legalId
+                },
                 paymentMethod,
                 itemsPrice,
                 taxPrice,
