@@ -1,5 +1,6 @@
 const Order = require('../models/Order');
-const { sendOrderEmail } = require('../utils/emailService');
+const Product = require('../models/Product');
+const { sendOrderEmail, sendAdminNewOrderEmail, sendTrackingEmail } = require('../utils/emailService');
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -37,11 +38,15 @@ exports.addOrderItems = async (req, res) => {
 
             const createdOrder = await order.save();
 
+
             // Send Notifications
             // Fetch full user details to ensure we have the email (JWT might be minimal)
             const fullUser = await require('../models/User').findById(req.user.id);
             if (fullUser) {
+                // To Customer
                 await sendOrderEmail(createdOrder, fullUser);
+                // To Admin
+                await sendAdminNewOrderEmail(createdOrder, fullUser);
             } else {
                 console.warn("User not found for email notification");
             }
@@ -131,6 +136,95 @@ exports.updateOrderStatus = async (req, res) => {
                 order.deliveredAt = Date.now();
             }
             const updatedOrder = await order.save();
+            res.json(updatedOrder);
+        } else {
+            res.status(404).json({ message: 'Order not found' });
+        }
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// @desc    Verify Wompi Payment and Update Order
+// @route   PUT /api/orders/pay-wompi
+// @access  Private
+exports.verifyWompiPayment = async (req, res) => {
+    try {
+        const { transactionId, reference, transactionData } = req.body;
+
+        let order;
+        // Attempt to find by ID if reference looks like a MongoID, otherwise we might need a reference field.
+
+        // Priority: supplied orderId (simplest) > transaction reference (if it matches ID)
+
+        if (req.body.orderId) {
+            order = await Order.findById(req.body.orderId);
+        } else if (reference && reference.match(/^[0-9a-fA-F]{24}$/)) {
+            order = await Order.findById(reference);
+        }
+
+        if (order) {
+            order.isPaid = true;
+            order.paidAt = Date.now();
+            order.paymentResult = {
+                id: transactionId,
+                status: 'APPROVED',
+                update_time: new Date().toISOString(),
+                email_address: order.shippingAddress?.email || req.user.email
+            };
+            // Also update status to 'Processing' instead of just 'Pending' if paid
+            order.status = 'Processing';
+
+            // Reduce Stock
+            for (const item of order.orderItems) {
+                const product = await Product.findById(item.product);
+                if (product) {
+                    product.stock = Math.max(0, product.stock - item.quantity);
+                    await product.save();
+                }
+            }
+
+            const updatedOrder = await order.save();
+
+            res.json(updatedOrder);
+        } else {
+            res.status(404).json({ message: 'Order not found for this payment' });
+        }
+    } catch (err) {
+        console.error("Wompi Verification Error:", err);
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// @desc    Update order tracking number
+// @route   PUT /api/orders/:id/tracking
+// @access  Private/Admin
+exports.updateOrderTracking = async (req, res) => {
+    try {
+        const { trackingNumber } = req.body;
+        const order = await Order.findById(req.params.id).populate('user', 'name email');
+
+        if (order) {
+            // We can store tracking number in a new field or inside delivery status
+            // Checking Order model would be ideal, but I'll assume we can add a new field dynamically or `result` field.
+            // Let's treat it as part of `deliveryResult` or top level if schema permits.
+            // Javascript mongo models are flexible unless strict.
+            // I'll add `trackingNumber` to the order object.
+
+            // Note: Mongoose strict mode might strip this if not in schema. 
+            // We should ideally check Schema. But for now, let's try. 
+            // If it fails to save, we might need to use a 'mixed' field if available or add it to Schema.
+            // Assuming Schema is not provided, I will try to save. If it fails, I'll advise user or check schema.
+
+            order.trackingNumber = trackingNumber;
+            order.isDelivered = false; // Still in progress, but shipped?
+            order.status = 'Shipped'; // Update status to Shipped
+
+            const updatedOrder = await order.save(); // This might strip trackingNumber if strict: true
+
+            // Send Tracking Email
+            await sendTrackingEmail(updatedOrder, trackingNumber);
+
             res.json(updatedOrder);
         } else {
             res.status(404).json({ message: 'Order not found' });

@@ -12,7 +12,7 @@ const transporter = nodemailer.createTransport({
 const getTemplate = (title, content, actionLink = null, actionText = null) => {
     return `
     <!DOCTYPE html>
-    <html>
+    <html lang="es">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -104,6 +104,99 @@ const sendOrderEmail = async (order, user) => {
     }
 };
 
+const sendAdminNewOrderEmail = async (order, user) => {
+    try {
+        const adminEmail = 'kimjuhogar@gmail.com';
+        console.log(`[EMAIL] Sending Admin Notification to ${adminEmail}`);
+
+        const itemsHtml = `
+            <div class="items-box">
+                ${order.orderItems.map(item => `
+                    <div class="item-row">
+                        <span>${item.name} (x${item.quantity})</span>
+                        <span>$${item.price.toLocaleString()}</span>
+                    </div>
+                `).join('')}
+                <div class="total">Total: $${order.totalPrice.toLocaleString()}</div>
+            </div>
+        `;
+
+        const customerInfoHtml = `
+            <div style="background-color: #fdf2f8; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: left; font-size: 14px; color: #4b5563;">
+                 <strong style="color: #db2777;">Datos del Cliente:</strong><br/>
+                 👤 <strong>Nombre:</strong> ${user.name}<br/>
+                 📧 <strong>Email:</strong> ${user.email}<br/>
+                 📞 <strong>Teléfono:</strong> ${order.shippingAddress.phone || user.phone || 'N/A'}<br/>
+                 📍 <strong>Dirección:</strong> ${order.shippingAddress.address}, ${order.shippingAddress.city}, ${order.shippingAddress.state}<br/>
+                 🆔 <strong>ID/CC:</strong> ${order.shippingAddress.legalId || 'N/A'}
+            </div>
+        `;
+
+        const htmlContent = getTemplate(
+            '¡Nueva Venta Realizada! 🎉',
+            `¡Felicidades! Se ha realizado una nueva compra en Kimju Hogar.<br/><br/>
+            ${customerInfoHtml}
+            <strong>Detalle del Pedido #${order._id}:</strong><br/>
+            ${itemsHtml}`,
+            `https://kimjuhogar.com/admin`,
+            'Ir al Panel Admin'
+        );
+
+        const mailOptions = {
+            from: '"Kimju Bot 🤖" <no-reply@kimjuhogar.com>',
+            to: adminEmail,
+            subject: `¡Nueva Venta! 🤑 Orden #${order._id} - $${order.totalPrice.toLocaleString()}`,
+            html: htmlContent
+        };
+
+        await transporter.sendMail(mailOptions);
+        return true;
+    } catch (error) {
+        console.error('Admin Email error:', error);
+        return false;
+    }
+};
+
+const sendTrackingEmail = async (order, trackingNumber) => {
+    try {
+        // Populate user if needed, or assume order.shippingAddress has email if user is null (guest)
+        // Ideally order should be populated with user before calling this, or assume order.user is the object.
+        const recipientEmail = order.user?.email || order.shippingAddress.email;
+        const recipientName = order.user?.name || order.shippingAddress.fullName || 'Cliente';
+
+        if (!recipientEmail) {
+            console.warn(`[EMAIL WARNING] No recipient for tracking email.`);
+            return false;
+        }
+
+        console.log(`[EMAIL] Sending Tracking Info to ${recipientEmail}`);
+
+        const htmlContent = getTemplate(
+            '¡Tu pedido está en camino! 🚚',
+            `Hola ${recipientName.split(' ')[0]},<br/><br/>
+            ¡Buenas noticias! Hemos enviado tu pedido <strong>#${order._id}</strong>.<br/><br/>
+            Tu número de guía es: <strong style="font-size: 18px; color: #db2777; background: #fce7f3; padding: 5px 10px; border-radius: 5px;">${trackingNumber}</strong><br/><br/>
+            Puedes rastrear tu paquete usando este número en la transportadora correspondiente.`,
+            'https://kimjuhogar.com/profile',
+            'Ver mi Pedido'
+        );
+
+        const mailOptions = {
+            from: '"Kimju Hogar" <no-reply@kimjuhogar.com>',
+            to: recipientEmail,
+            subject: `🚚 ¡Tu pedido #${order._id} ha sido enviado!`,
+            html: htmlContent
+        };
+
+        await transporter.sendMail(mailOptions);
+        return true;
+    } catch (error) {
+        console.error('Tracking Email error:', error);
+        return false;
+    }
+};
+
+
 const sendRecoveryEmail = async (user, token) => {
     try {
         console.log(`[EMAIL] Sending Recovery to ${user.email}`);
@@ -151,4 +244,4 @@ const sendEmail = async ({ email, subject, html }) => {
     }
 };
 
-module.exports = { sendOrderEmail, sendRecoveryEmail, sendEmail, getTemplate };
+module.exports = { sendOrderEmail, sendRecoveryEmail, sendEmail, sendAdminNewOrderEmail, sendTrackingEmail, getTemplate };

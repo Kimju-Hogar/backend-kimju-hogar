@@ -6,7 +6,9 @@ const {
     getMyOrders,
     getOrders,
     updateOrderToPaid,
-    updateOrderStatus
+    updateOrderStatus,
+    verifyWompiPayment,
+    updateOrderTracking
 } = require('../controllers/orderController');
 const auth = require('../middleware/authMiddleware');
 
@@ -15,6 +17,8 @@ router.get('/myorders', auth, getMyOrders);
 router.get('/', auth, getOrders);
 router.get('/:id', auth, getOrderById);
 router.put('/:id/pay', auth, updateOrderToPaid);
+router.put('/pay-wompi', auth, verifyWompiPayment);
 router.put('/:id/status', auth, updateOrderStatus);
+router.put('/:id/tracking', auth, updateOrderTracking);
 
 module.exports = router;
