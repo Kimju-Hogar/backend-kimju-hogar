@@ -3,7 +3,13 @@ const router = express.Router();
 const { sendEmail, getTemplate } = require('../utils/emailService');
 
 router.post('/', async (req, res) => {
-    const { name, email, message } = req.body;
+    const { name, email, message, website } = req.body;
+
+    // Honeypot Protection
+    if (website) {
+        // Silently fail for bots
+        return res.json({ msg: 'Mensaje enviado correctamente. Te responderemos pronto. 💖' });
+    }
 
     if (!name || !email || !message) {
         return res.status(400).json({ msg: 'Por favor llena todos los campos' });

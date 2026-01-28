@@ -4,7 +4,12 @@ const { sendEmail, getTemplate } = require('../utils/emailService');
 // @desc    Subscribe to newsletter
 // @route   POST /api/newsletter
 exports.subscribeCallback = async (req, res) => {
-    const { email } = req.body;
+    const { email, website } = req.body;
+
+    // Honeypot Protection
+    if (website) {
+        return res.status(201).json({ msg: '¡Suscripción exitosa! Revisa tu correo. 💌' });
+    }
 
     if (!email) {
         return res.status(400).json({ msg: 'Por favor ingresa un correo electrónico.' });
