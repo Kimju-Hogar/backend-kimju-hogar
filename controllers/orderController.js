@@ -38,12 +38,18 @@ exports.addOrderItems = async (req, res) => {
             const createdOrder = await order.save();
 
             // Send Notifications
-            // Fetch full user details if needed, but req.user has basic info
-            await sendOrderEmail(createdOrder, req.user);
+            // Fetch full user details to ensure we have the email (JWT might be minimal)
+            const fullUser = await require('../models/User').findById(req.user.id);
+            if (fullUser) {
+                await sendOrderEmail(createdOrder, fullUser);
+            } else {
+                console.warn("User not found for email notification");
+            }
 
             res.status(201).json(createdOrder);
         }
     } catch (err) {
+        console.error('Error creating order:', err);
         res.status(500).json({ message: err.message });
     }
 };

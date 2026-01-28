@@ -64,6 +64,10 @@ const getTemplate = (title, content, actionLink = null, actionText = null) => {
 
 const sendOrderEmail = async (order, user) => {
     try {
+        if (!user || !user.email) {
+            console.warn(`[EMAIL WARNING] Skipping order email for order ${order._id}: No recipient email defined.`);
+            return false;
+        }
         console.log(`[EMAIL] Sending Order to ${user.email}`);
 
         const itemsHtml = `

@@ -6,7 +6,7 @@ const wompiController = require('../controllers/wompiController');
 // @desc    Generate Wompi Signature
 // @route   POST /api/payments/signature
 // @access  Private
-router.post('/signature', auth, wompiController.generateSignature);
+router.post('/signature', wompiController.generateSignature);
 
 // @desc    Wompi Webhook
 // @route   POST /api/payments/webhook

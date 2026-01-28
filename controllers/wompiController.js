@@ -19,30 +19,42 @@ wompiController.generateSignature = async (req, res) => {
         }
 
         const integritySecret = process.env.WOMPI_INTEGRITY_SECRET;
-        if (!integritySecret) {
-            console.error('WOMPI_INTEGRITY_SECRET is not defined in .env');
+        const publicKey = process.env.WOMPI_PUBLIC_KEY;
+
+        if (!integritySecret || !publicKey) {
+            console.error('WOMPI_INTEGRITY_SECRET or WOMPI_PUBLIC_KEY not set in .env');
             return res.status(500).json({ msg: 'Server configuration error' });
         }
 
+        // Robust secret cleaning: remove quotes and whitespace
+        const secretToUse = integritySecret.replace(/['"]+/g, '').trim();
+
         const currency = 'COP';
-        // Wompi requires amount in CENTS (e.g. 10000.00 -> 1000000)
-        // Ensure amount is string or number and convert to cents string
         const amountInCents = Math.round(Number(amount) * 100);
         const reference = orderId.toString();
 
-        const signatureString = `${reference}${amountInCents}${currency}${integritySecret}`;
+        // Concatenation order: Reference + AmountInCents + Currency + IntegritySecret
+        const signatureString = `${reference}${amountInCents}${currency}${secretToUse}`;
 
         const signature = crypto
             .createHash('sha256')
             .update(signatureString)
             .digest('hex');
 
+        // console.log('--- WOMPI SIGNATURE DEBUG ---');
+        // console.log('Reference:', reference);
+        // console.log('AmountInCents:', amountInCents);
+        // console.log('Currency:', currency);
+        // console.log('Signature String:', signatureString);
+        // console.log('Generated Hash:', signature);
+        // console.log('-----------------------------');
+
         res.json({
             signature,
             reference,
-            amountInCents, // Send this back so frontend uses exact same value
+            amountInCents,
             currency,
-            publicKey: process.env.WOMPI_PUBLIC_KEY
+            publicKey: publicKey
         });
 
     } catch (error) {
@@ -97,7 +109,7 @@ wompiController.handleWebhook = async (req, res) => {
             concatenationString += getNestedValue(data, prop);
         });
 
-        concatenationString += eventsSecret;
+        concatenationString += eventsSecret.trim();
 
         const expectedChecksum = crypto
             .createHash('sha256')
@@ -150,10 +162,16 @@ wompiController.handleWebhook = async (req, res) => {
                 }
             }
 
-            // Send Email
+            // Send Email (Robust)
             const user = await User.findById(order.user);
-            if (user) {
-                await sendOrderEmail(order, user);
+            const emailTarget = user ? user.email : transaction.customer_email;
+            const nameTarget = user ? user.name : (transaction.customer_data?.full_name || 'Cliente');
+
+            if (emailTarget) {
+                const userObj = { email: emailTarget, name: nameTarget };
+                await sendOrderEmail(order, userObj);
+            } else {
+                console.warn('Skipping email: No recipient found for order ' + orderId);
             }
 
             console.log('Order finalized successfully');
@@ -183,35 +201,26 @@ wompiController.verifyTransaction = async (req, res) => {
         // Documentation says: GET /v1/transactions/:id with Public Key usually works for status.
 
         const isProduction = process.env.NODE_ENV === 'production';
-        // Note: Wompi Production URL is https://production.wompi.co/v1
-        // Sandbox: https://sandbox.wompi.co/v1
-        // Let's assume production url base or sandbox based on env. 
-        // But the user might be testing. Let's use the one matching the keys. 
-        // Actually, usually it's https://production.wompi.co/v1 for both if using Test Keys in Prod environment? 
-        // No, Sandbox is separate. 
-        // Safest: Use https://production.wompi.co/v1/transactions/ and if 404 try sandbox? 
-        // Or check a config.
-        const wompiUrl = 'https://production.wompi.co/v1/transactions';
+        const publicKey = process.env.WOMPI_PUBLIC_KEY;
 
-        // We need network access. 
+        // Determine environment based on key prefix
+        const isSandboxKey = publicKey && publicKey.startsWith('pub_test_');
+
+        const wompiUrl = isSandboxKey
+            ? 'https://sandbox.wompi.co/v1/transactions'
+            : 'https://production.wompi.co/v1/transactions';
+
+        console.log(`[WOMPI] Verifying transaction ${id} in ${isSandboxKey ? 'SANDBOX' : 'PRODUCTION'}`);
+
         const response = await fetch(`${wompiUrl}/${id}`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${process.env.WOMPI_PUBLIC_KEY}` // Usually Public key is enough for read-only if owner? Or Private?
-                // Actually for security, better to use Private key server-side.
-                // Let's try just fetching.
+                'Authorization': `Bearer ${publicKey}`
             }
         });
 
         if (!response.ok) {
-            // Try Sandbox if failed (maybe keys are test keys on sandbox env?)
-            const sandboxResponse = await fetch(`https://sandbox.wompi.co/v1/transactions/${id}`);
-            if (sandboxResponse.ok) {
-                const data = await sandboxResponse.json();
-                return await processTransactionData(data.data, res);
-            }
-
-            throw new Error('Transaction not found in Wompi');
+            throw new Error(`Transaction not found or API error: ${response.status}`);
         }
 
         const data = await response.json();
@@ -253,7 +262,12 @@ async function processTransactionData(transaction, res) {
         }
 
         const user = await User.findById(order.user);
-        if (user) sendOrderEmail(order, user);
+        const emailTarget = user ? user.email : transaction.customer_email;
+
+        if (emailTarget) {
+            const userObj = { email: emailTarget, name: user?.name || transaction.customer_data?.full_name || 'Cliente' };
+            await sendOrderEmail(order, userObj);
+        }
     }
 
     res.json({
