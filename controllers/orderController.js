@@ -1,6 +1,7 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const { sendOrderEmail, sendAdminNewOrderEmail, sendTrackingEmail } = require('../utils/emailService');
+const axios = require('axios');
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -194,6 +195,44 @@ exports.verifyWompiPayment = async (req, res) => {
             if (fullUser) {
                 await sendOrderEmail(updatedOrder, fullUser);
                 await sendAdminNewOrderEmail(updatedOrder, fullUser);
+            }
+
+            // Sync to Panel
+            try {
+                if (process.env.PANEL_API_URL && process.env.SYNC_SECRET) {
+                    // Populate products to get SKU (assuming logic added to support SKU in product)
+                    // Or we trust that Product model now has SKU.
+                    // But order items store product reference.
+
+                    const syncItems = [];
+                    for (const item of updatedOrder.orderItems) {
+                        const productDoc = await Product.findById(item.product);
+                        if (productDoc) {
+                            syncItems.push({
+                                sku: productDoc.sku || productDoc.name, // Fallback to name if SKU missing (legacy)
+                                quantity: item.quantity,
+                                price: item.price
+                            });
+                        }
+                    }
+
+                    await axios.post(`${process.env.PANEL_API_URL}/api/sync/sales`, {
+                        orderId: updatedOrder._id,
+                        products: syncItems,
+                        totalAmount: updatedOrder.totalPrice,
+                        paymentMethod: 'Wompi',
+                        customer: {
+                            name: fullUser ? fullUser.name : 'Guest',
+                            email: fullUser ? fullUser.email : (updatedOrder.shippingAddress.email || '')
+                        },
+                        origin: 'Kingyu Hogar'
+                    }, {
+                        headers: { 'x-sync-secret': process.env.SYNC_SECRET }
+                    });
+                    console.log(`Synced sale ${updatedOrder._id} to Panel`);
+                }
+            } catch (syncErr) {
+                console.error("Failed to sync sale to Panel:", syncErr.message);
             }
 
             res.json(updatedOrder);

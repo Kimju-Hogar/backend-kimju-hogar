@@ -5,6 +5,11 @@ const productSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    sku: {
+        type: String,
+        // unique: true, // sparse? or just optional for now
+        // required: true // Can't make required yet as existing docs don't have it
+    },
     description: {
         type: String,
         // required: true, // Made optional to prevent validation errors on partial creation
