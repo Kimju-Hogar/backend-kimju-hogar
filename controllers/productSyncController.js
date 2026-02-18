@@ -1,4 +1,5 @@
 const Product = require('../models/Product');
+const Category = require('../models/Category');
 
 // @desc    Sync product from Panel (Create or Update)
 // @route   POST /api/sync/products
@@ -44,6 +45,32 @@ const syncProduct = async (req, res) => {
         // If I can't change the model easily (might break existing frontend?), 
         // I'll use a unique tag 'sku:123' or something? No that's messy.
         // Best is to add sku to schema.
+
+        // --- Category Handling ---
+        if (category) {
+            let catDoc = await Category.findOne({ name: category });
+            if (!catDoc) {
+                // Create Category if not exists
+                // Generate simple slug
+                const slug = category.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+
+                catDoc = new Category({
+                    name: category,
+                    slug: slug,
+                    description: `Category for ${category}`,
+                    icon: 'Box' // Default icon
+                });
+                try {
+                    await catDoc.save();
+                    console.log(`Created new category: ${category}`);
+                } catch (catErr) {
+                    console.error("Error creating category during sync:", catErr.message);
+                    // Continue even if category creation fails (maybe duplicate slug?)
+                }
+            }
+        }
+
+        // Let's try to find by Name first since that's what we have.
 
         // Let's try to find by Name first since that's what we have.
         product = await Product.findOne({ name: name });
