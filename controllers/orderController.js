@@ -183,7 +183,27 @@ exports.verifyWompiPayment = async (req, res) => {
             for (const item of order.orderItems) {
                 const product = await Product.findById(item.product);
                 if (product) {
+                    // Global stock reduction
                     product.stock = Math.max(0, product.stock - item.quantity);
+                    
+                    // Variation stock reduction
+                    if (item.selectedVariation) {
+                        // Check colors
+                        if (product.colors && product.colors.length > 0) {
+                            const colorIndex = product.colors.findIndex(c => c.color === item.selectedVariation);
+                            if (colorIndex > -1) {
+                                product.colors[colorIndex].stock = Math.max(0, product.colors[colorIndex].stock - item.quantity);
+                            }
+                        }
+                        // Check sizes
+                        if (product.sizes && product.sizes.length > 0) {
+                            const sizeIndex = product.sizes.findIndex(s => s.size === item.selectedVariation);
+                            if (sizeIndex > -1) {
+                                product.sizes[sizeIndex].stock = Math.max(0, product.sizes[sizeIndex].stock - item.quantity);
+                            }
+                        }
+                    }
+                    
                     await product.save();
                 }
             }
