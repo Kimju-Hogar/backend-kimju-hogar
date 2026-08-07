@@ -236,42 +236,88 @@ async function processTransactionData(transaction, res) {
     const orderId = transaction.reference;
     const status = transaction.status;
 
-    const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ msg: 'Order not found locally' });
+    console.log(`[WOMPI] processTransactionData: orderId=${orderId}, status=${status}`);
+
+    let order;
+    try {
+        order = await Order.findById(orderId);
+    } catch (findErr) {
+        console.error('[WOMPI] Error finding order by ID:', findErr.message);
+        return res.status(500).json({ msg: 'Error finding order' });
+    }
+
+    if (!order) {
+        console.error('[WOMPI] Order not found locally for reference:', orderId);
+        return res.status(404).json({ msg: 'Order not found locally' });
+    }
 
     // If approved and not marked paid, mark it (fallback if webhook failed/delayed)
     if (status === 'APPROVED' && !order.isPaid) {
+        console.log(`[WOMPI] Marking order ${orderId} as PAID (fallback verification)`);
+
         order.isPaid = true;
         order.paidAt = Date.now();
         order.status = 'Processing';
         order.paymentResult = {
             id: transaction.id,
             status: status,
-            update_time: transaction.created_at,
-            email_address: transaction.customer_data?.email // Wompi structure varies
+            update_time: transaction.created_at || new Date().toISOString(),
+            email_address: transaction.customer_data?.email || transaction.customer_email || ''
         };
-        await order.save();
 
-        // Decrease stock if not done
+        try {
+            await order.save();
+            console.log(`[WOMPI] Order ${orderId} saved as PAID successfully`);
+        } catch (saveErr) {
+            console.error('[WOMPI] Error saving order as paid:', saveErr.message);
+            return res.status(500).json({ msg: 'Error saving order payment status' });
+        }
+
+        // Decrease stock for all items
         for (const item of order.orderItems) {
-            const product = await Product.findById(item.product);
-            if (product) {
-                product.stock = Math.max(0, product.stock - item.quantity);
-                await product.save();
+            try {
+                const product = await Product.findById(item.product);
+                if (product) {
+                    product.stock = Math.max(0, product.stock - item.quantity);
+
+                    // Also reduce variation stock if applicable
+                    if (item.selectedVariation) {
+                        if (product.colors && product.colors.length > 0) {
+                            const ci = product.colors.findIndex(c => c.color === item.selectedVariation);
+                            if (ci > -1) product.colors[ci].stock = Math.max(0, product.colors[ci].stock - item.quantity);
+                        }
+                        if (product.sizes && product.sizes.length > 0) {
+                            const si = product.sizes.findIndex(s => s.size === item.selectedVariation);
+                            if (si > -1) product.sizes[si].stock = Math.max(0, product.sizes[si].stock - item.quantity);
+                        }
+                    }
+                    await product.save();
+                }
+            } catch (stockErr) {
+                console.error('[WOMPI] Error updating stock for item:', stockErr.message);
             }
         }
 
-        const user = await User.findById(order.user);
-        const emailTarget = user ? user.email : transaction.customer_email;
+        // Send confirmation email
+        try {
+            const user = await User.findById(order.user);
+            const emailTarget = user ? user.email : (transaction.customer_data?.email || transaction.customer_email);
+            const nameTarget = user ? user.name : (transaction.customer_data?.full_name || 'Cliente');
 
-        if (emailTarget) {
-            const userObj = { email: emailTarget, name: user?.name || transaction.customer_data?.full_name || 'Cliente' };
-            await sendOrderEmail(order, userObj);
+            if (emailTarget) {
+                const userObj = { email: emailTarget, name: nameTarget };
+                await sendOrderEmail(order, userObj);
+                console.log(`[WOMPI] Confirmation email sent to ${emailTarget}`);
+            }
+        } catch (emailErr) {
+            console.error('[WOMPI] Error sending email (non-critical):', emailErr.message);
         }
+    } else if (status === 'APPROVED' && order.isPaid) {
+        console.log(`[WOMPI] Order ${orderId} already marked as paid, skipping update`);
     }
 
     res.json({
-        status: status, // APPROVED, DECLINED, ERROR
+        status: status, // APPROVED, DECLINED, ERROR, PENDING
         orderId: orderId,
         isPaid: order.isPaid
     });
