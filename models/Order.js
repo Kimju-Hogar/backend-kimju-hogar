@@ -6,7 +6,7 @@ const orderSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
-    }, // Make user optional for Guest Checkout if needed later, but currently required.
+    },
     orderItems: [
         {
             product: {
@@ -18,25 +18,33 @@ const orderSchema = new mongoose.Schema({
             quantity: { type: Number, required: true },
             price: { type: Number, required: true },
             image: { type: String },
-            selectedVariation: { type: String }, // Store selected variation (color, style, etc.)
+            selectedVariation: { type: String }, // Talla o color elegido
         }
     ],
     shippingAddress: {
-        fullName: { type: String, required: true },
-        phone: { type: String, required: true },
+        fullName: { type: String },
+        email: { type: String },
+        legalId: { type: String },
+        phone: { type: String },
         address: { type: String, required: true },
         city: { type: String, required: true },
-        state: { type: String, required: true },
+        state: { type: String },
         postalCode: { type: String },
         country: { type: String, required: true },
-        country: { type: String, required: true },
         additionalInfo: { type: String },
-        legalId: { type: String }, // Saved DNI/CC
-        email: { type: String } // Backup email in shipping address
     },
-    trackingNumber: { type: String }, // Explicit field for tracking
     // Codigo canonico del medio de pago. La lista vive en config/payments.js
     // y es la misma que usa el Panel de Contabilidad para agrupar reportes.
+    // Tienda que origino la orden ("Kimju Hogar" / "Kimju Calzado").
+    //
+    // Las dos tiendas comparten la misma base de datos y la misma cuenta de
+    // Addi, que solo admite una URL de notificacion. Es decir: el webhook de una
+    // orden de calzado puede llegarle al backend de hogar. Sin este campo, la
+    // venta se reportaria al Panel con el nombre del backend que la proceso, no
+    // con el de la tienda donde se compro.
+    store: {
+        type: String,
+    },
     paymentMethod: {
         type: String,
         required: true,
@@ -108,6 +116,9 @@ const orderSchema = new mongoose.Schema({
     status: {
         type: String,
         default: 'Pending', // Pending, Processing, Shipped, Delivered, Cancelled
+    },
+    trackingNumber: {
+        type: String
     }
 }, { timestamps: true });
 

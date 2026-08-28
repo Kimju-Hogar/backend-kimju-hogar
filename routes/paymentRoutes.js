@@ -26,8 +26,7 @@ router.post('/webhook', wompiController.handleWebhook);
 // @desc    Verificar transacción de Wompi (regreso del widget)
 // @route   GET /api/payments/verify/:id
 router.get('/verify/:id', wompiController.verifyTransaction);
-
-// @desc    Verificar transaccion de Wompi por referencia (respaldo)
+// @desc    Verificar transacción de Wompi por referencia (respaldo)
 // @route   GET /api/payments/verify-by-reference/:orderId
 router.get('/verify-by-reference/:orderId', wompiController.verifyTransactionByReference);
 

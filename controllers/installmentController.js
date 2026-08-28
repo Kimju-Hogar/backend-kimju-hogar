@@ -50,6 +50,56 @@ const frontendUrl = () => (process.env.FRONTEND_URL || '').replace(/["']/g, '').
 const backendUrl = () =>
     (process.env.API_URL || process.env.BACKEND_URL || '').replace(/["']/g, '').replace(/\/+$/, '');
 
+/**
+ * Comprueba las credenciales con las que el financiador llama a nuestro webhook.
+ *
+ * Acepta HTTP Basic Auth (lo que usa Addi con sus "credenciales de notificacion")
+ * y, como alternativa, un secreto plano en cabecera para financiadores que
+ * trabajen asi.
+ *
+ * Si el comercio no configuro credenciales, no se bloquea la llamada: el estado
+ * se vuelve a consultar contra el API del financiador de todos modos, asi que un
+ * webhook falso no puede aprobar nada. Estas credenciales evitan el ruido, no
+ * son la barrera de seguridad.
+ */
+const verifyWebhookAuth = (providerCode, req) => {
+    const user = process.env[`${providerCode}_WEBHOOK_USER`];
+    const password = process.env[`${providerCode}_WEBHOOK_PASSWORD`];
+    const secret = process.env[`${providerCode}_WEBHOOK_SECRET`];
+
+    if (!user && !password && !secret) return true; // sin configurar: no se exige
+
+    const header = req.headers['authorization'] || '';
+
+    if (user && password) {
+        if (!header.toLowerCase().startsWith('basic ')) return false;
+        let decoded;
+        try {
+            decoded = Buffer.from(header.slice(6).trim(), 'base64').toString('utf8');
+        } catch {
+            return false;
+        }
+        // El usuario no lleva ':', asi que se parte en el primero.
+        const sep = decoded.indexOf(':');
+        if (sep === -1) return false;
+        return (
+            safeEqual(decoded.slice(0, sep), user) &&
+            safeEqual(decoded.slice(sep + 1), password)
+        );
+    }
+
+    const received = req.headers['x-webhook-secret'] || req.headers['x-addi-signature'] || header;
+    return Boolean(received) && safeEqual(String(received).trim(), secret);
+};
+
+/** Comparacion en tiempo constante, para no filtrar el secreto por temporizacion. */
+const safeEqual = (a, b) => {
+    const bufA = Buffer.from(String(a));
+    const bufB = Buffer.from(String(b));
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+};
+
 const splitName = (fullName = '') => {
     const parts = String(fullName).trim().split(/\s+/).filter(Boolean);
     return {
@@ -217,12 +267,51 @@ exports.createApplication = async (req, res) => {
             simulated,
         });
     } catch (error) {
+        // Se clasifica el fallo porque cada causa se arregla en un sitio
+        // distinto, y desde el navegador todas se veian igual: un 502 opaco.
+        const status = error.response?.status;
+        const stage = error.stage || 'DESCONOCIDO';
+
+        let reason = 'DESCONOCIDO';
+        let pista = '';
+
+        if (error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+            reason = 'RED';
+            pista = 'El servidor no logro salir a internet hacia el financiador. Revisa DNS o el cortafuegos de salida del hosting.';
+        } else if (stage === 'AUTH') {
+            reason = 'CREDENCIALES';
+            pista = 'El financiador rechazo las credenciales. Suele ser el CLIENT_ID/CLIENT_SECRET mal copiado, o credenciales de un ambiente (pruebas/produccion) contra las URLs del otro.';
+        } else if (stage === 'URL_API') {
+            reason = 'URL_API';
+            pista = 'La URL configurada devolvio una pagina web en vez de JSON: no es el endpoint del API. Corrige ADDI_API_URL / ADDI_CREATE_PATH con lo que diga el manual de integracion.';
+        } else if (stage === 'CONTRACT' || (stage === 'CREATE' && status && status >= 400 && status < 500)) {
+            reason = 'CONTRATO';
+            pista = 'El financiador rechazo los datos de la solicitud. El contrato del API no coincide con lo implementado: revisa el detalle de abajo para ver que campo reclama.';
+        } else if (status && status >= 500) {
+            reason = 'FINANCIADOR';
+            pista = 'El financiador respondio con un error propio. Suele ser temporal.';
+        }
+
         const detail = error.response?.data
-            ? JSON.stringify(error.response.data).slice(0, 500)
+            ? JSON.stringify(error.response.data).slice(0, 800)
             : error.message;
-        console.error('[Cuotas] Error creando la solicitud:', detail);
+
+        console.error(
+            `[Cuotas] Fallo creando la solicitud | proveedor=${req.params.provider} | causa=${reason} | paso=${stage} | http=${status || 'n/a'}`
+        );
+        console.error('[Cuotas] Respuesta del financiador:', detail);
+        if (pista) console.error('[Cuotas]', pista);
+
         res.status(502).json({
             msg: 'No pudimos iniciar tu solicitud de crédito. Intenta de nuevo o elige otro medio de pago.',
+            // Categoria, sin datos sensibles: permite diagnosticar desde la
+            // consola del navegador sin tener que entrar a los logs del hosting.
+            reason,
+            // Solo en errores de contrato: el financiador esta diciendo que campo
+            // le falta o no le cuadra. Son mensajes de validacion de esquema, no
+            // llevan credenciales ni datos del cliente, y sin ellos hay que ir a
+            // buscar los logs del hosting para avanzar un paso.
+            ...(reason === 'CONTRATO' || reason === 'URL_API' ? { detail } : {}),
         });
     }
 };
@@ -262,7 +351,9 @@ const resolveOrderStatus = async (order) => {
         return { status: 'PENDING', order };
     }
 
-    const result = await service.getApplicationStatus(application.applicationId);
+    const result = await service.getApplicationStatus(application.applicationId, {
+        orderId: order._id.toString(),
+    });
 
     order.creditApplication.status = result.status;
     order.creditApplication.rawStatus = result.rawStatus;
@@ -341,17 +432,15 @@ exports.handleWebhook = async (req, res) => {
             return res.sendStatus(400);
         }
 
-        // Verificación opcional de secreto compartido, si el comercio lo configuró.
-        const expectedSecret = process.env[`${provider.code}_WEBHOOK_SECRET`];
-        if (expectedSecret) {
-            const received =
-                req.headers['x-webhook-secret'] ||
-                req.headers['x-addi-signature'] ||
-                req.headers['authorization'];
-            if (!received || !String(received).includes(expectedSecret)) {
-                console.error(`[Cuotas] Webhook de ${provider.code} con secreto inválido.`);
-                return res.sendStatus(401);
-            }
+        // Addi entrega unas "credenciales de notificacion" (usuario y contrasena)
+        // aparte de las de operacion, y llama a este webhook con HTTP Basic Auth.
+        //
+        // La version anterior buscaba la contrasena en texto plano dentro de la
+        // cabecera Authorization, cosa que nunca habria funcionado: Basic Auth la
+        // manda en base64. Habria rechazado todas las notificaciones legitimas.
+        if (!verifyWebhookAuth(provider.code, req)) {
+            console.error(`[Cuotas] Webhook de ${provider.code} con credenciales invalidas.`);
+            return res.sendStatus(401);
         }
 
         const applicationId = provider.service.extractApplicationIdFromWebhook(req.body);
